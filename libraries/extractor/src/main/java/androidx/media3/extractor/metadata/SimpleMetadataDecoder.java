@@ -34,7 +34,7 @@ public abstract class SimpleMetadataDecoder implements MetadataDecoder {
     ByteBuffer buffer = Assertions.checkNotNull(inputBuffer.data);
     Assertions.checkArgument(
         buffer.position() == 0 && buffer.hasArray() && buffer.arrayOffset() == 0);
-    return inputBuffer.isDecodeOnly() ? null : decode(inputBuffer, buffer);
+    return decode(inputBuffer, buffer);
   }
 
   /**
