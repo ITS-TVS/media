@@ -1,5 +1,182 @@
 # Release notes
 
+## 1.3
+
+### 1.3.0 (2024-03-06)
+
+This release includes the following changes since the
+[1.2.1 release](#121-2024-01-09):
+
+*   Common Library:
+    *   Implement support for `android.resource://package/[type/]name` raw
+        resource URIs where `package` is different to the package of the current
+        application. This has always been documented to work, but wasn't
+        correctly implemented until now.
+    *   Normalize MIME types set by app code or read from media to be fully
+        lower-case.
+    *   Define ads with a full `MediaItem` instead of a single `Uri` in
+        `AdPlaybackState`.
+    *   Increase `minSdk` to 19 (Android KitKat). This is
+        [aligned with all other AndroidX libraries](https://android-developers.googleblog.com/2023/10/androidx-minsdkversion-19.html),
+        and is required for us to upgrade to the latest versions of our AndroidX
+        dependencies.
+    *   Populate both `artworkUri` and `artworkData` in
+        `MediaMetadata.Builder.populate(MediaMetadata)` when at least one of
+        them is non-null ([#964](https://github.com/androidx/media/issues/964)).
+*   ExoPlayer:
+    *   Add `PreloadMediaSource` and `PreloadMediaPeriod` that allows apps to
+        preload a content media source at a specific start position before
+        playback. `PreloadMediaSource` takes care of preparing the content media
+        source to receive the `Timeline`, preparing and caching the period at
+        the given start position, selecting tracks and loading media data for
+        the period. Apps control the preload progress by implementing
+        `PreloadMediaSource.PreloadControl` and set the preloaded source to the
+        player for playback.
+    *   Add `ExoPlayer.setImageOutput` that allows apps to set
+        `ImageRenderer.ImageOutput`.
+    *   `DefaultRenderersFactory` now provides an `ImageRenderer` to the player
+        by default with null `ImageOutput` and `ImageDecoder.Factory.DEFAULT`.
+    *   Emit `Player.Listener.onPositionDiscontinuity` event when silence is
+        skipped ([#765](https://github.com/androidx/media/issues/765)).
+    *   Add experimental support for parsing subtitles during extraction. You
+        can enable this using
+        `MediaSource.Factory.experimentalParseSubtitlesDuringExtraction()`.
+    *   Support adaptive media sources with `PreloadMediaSource`.
+    *   Implement `HttpEngineDataSource`, an `HttpDataSource` using the
+        [HttpEngine](https://developer.android.com/reference/android/net/http/HttpEngine)
+        API.
+    *   Prevent subclassing `CompositeSequenceableLoader`. This component was
+        [previously made extensible](https://github.com/androidx/media/commit/0de57cbfae7165dd3bb829e323d089cd312b4b1b)
+        but was never subclassed within the library. Customizations can be done
+        by wrapping an instance using the
+        [decorator pattern](https://en.wikipedia.org/wiki/Decorator_pattern) and
+        implementing a custom `CompositeSequenceableLoaderFactory`.
+    *   Fix issue where repeating the same time causes metadata from this item
+        to be cleared ([#1007](https://github.com/androidx/media/issues/1007)).
+    *   Rename `experimentalSetSubtitleParserFactory` methods on
+        `BundledChunkExtractor.Factory` and `DefaultHlsExtractorFactory` to
+        `setSubtitleParserFactory` and disallow passing `null`. Use the new
+        `experimentalParseSubtitlesDuringExtraction(boolean)` methods to control
+        parsing behaviour.
+    *   Add support for customising the `SubtitleParser.Factory` used during
+        extraction. This can be achieved with
+        `MediaSource.Factory.setSubtitleParserFactory()`.
+    *   Add source prefix to all `Format.id` fields generated from
+        `MergingMediaSource`. This helps to identify which source produced a
+        `Format` ([#883](https://github.com/androidx/media/issues/883)).
+    *   Fix the regex used for validating custom Common Media Client Data (CMCD)
+        key names by modifying it to only check for hyphen
+        ([#1028](https://github.com/androidx/media/issues/1028)).
+    *   Stop double-encoding CMCD query parameters
+        ([#1075](https://github.com/androidx/media/issues/1075)).
+*   Transformer:
+    *   Add support for flattening H.265/HEVC SEF slow motion videos.
+    *   Increase transmuxing speed, especially for 'remove video' edits.
+    *   Add API to ensure that the output file starts on a video frame. This can
+        make the output of trimming operations more compatible with player
+        implementations that don't show the first video frame until its
+        presentation timestamp
+        ([#829](https://github.com/androidx/media/issues/829)).
+    *   Add support for optimizing single asset mp4 trim operations.
+    *   Add support to ensure a video frame has the first timestamp in the
+        output file. Fixes output files beginning with black frame on iOS based
+        players ([#829](https://github.com/androidx/media/issues/829)).
+*   Track Selection:
+    *   Add `DefaultTrackSelector.selectImageTrack` to enable image track
+        selection.
+    *   Add `TrackSelectionParameters.isPrioritizeImageOverVideoEnabled` to
+        determine whether to select an image track if both an image track and a
+        video track are available. The default value is `false` which means
+        selecting a video track is prioritized.
+*   Extractors:
+    *   Add additional AV1C parsing to MP4 extractor to retrieve
+        `ColorInfo.colorSpace`, `ColorInfo.colorTransfer`, and
+        `ColorInfo.colorRange` values
+        ([#692](https://github.com/androidx/media/pull/692)).
+    *   MP3: Use constant bitrate (CBR) seeking for files with an `Info` header
+        (the CBR equivalent of the `Xing` header). Previously we used the seek
+        table from the `Info` header, but this results in less precise seeking
+        than if we ignore it and assume the file is CBR.
+    *   MPEG2-TS: Add DTS, DTS-LBR and DTS:X Profile2 support
+        ([#275](https://github.com/androidx/media/pull/275)).
+    *   Extract audio types from TS descriptors and map them to role flags,
+        allowing users to make better-informed audio track selections
+        ([#973](https://github.com/androidx/media/pull/973)).
+*   Audio:
+    *   Improve silence skipping algorithm with smooth volume ramp; retained
+        minimal silence and more natural silence durations
+        ([#7423](https://github.com/google/ExoPlayer/issues/7423)).
+    *   Report the skipped silence more deterministically
+        ([#1035](https://github.com/androidx/media/issues/1035)).
+*   Video:
+    *   Change the `MediaCodecVideoRenderer` constructor that takes a
+        `VideoFrameProcessor.Factory` argument and replace it with a constructor
+        that takes a `VideoSinkProvider` argument. Apps that want to inject a
+        custom `VideoFrameProcessor.Factory` can instantiate a
+        `CompositingVideoSinkProvider` that uses the custom
+        `VideoFrameProcessor.Factory` and pass the video sink provider to
+        `MediaCodecVideoRenderer`.
+*   Text:
+    *   Fix serialization of bitmap cues to resolve `Tried to marshall a Parcel
+        that contained Binder objects` error when using
+        `DefaultExtractorsFactory.setTextTrackTranscodingEnabled`
+        ([#836](https://github.com/androidx/media/issues/836)).
+    *   CEA-708: Ignore `rowLock` value. The CEA-708-E S-2023 spec states that
+        `rowLock` and `columnLock` should both be assumed to be true, regardless
+        of the values present in the stream (`columnLock` support is not
+        implemented, so it's effectively assumed to always be false).
+*   Image:
+    *   Add support for DASH thumbnails. Grid images are cropped and individual
+        thumbnails are provided to `ImageOutput` close to their presentation
+        times.
+*   DRM:
+    *   Play 'clear lead' unencrypted samples in DRM content immediately by
+        default, even if the keys for the later encrypted samples aren't ready
+        yet. This may lead to mid-playback stalls if the keys still aren't ready
+        when the playback position reaches the encrypted samples (but previously
+        playback wouldn't have started at all by this point). This behavior can
+        be disabled with
+        [`MediaItem.DrmConfiguration.Builder.setPlayClearContentWithoutKey`](https://developer.android.com/reference/androidx/media3/common/MediaItem.DrmConfiguration.Builder#setPlayClearContentWithoutKey\(boolean\))
+        or
+        [`DefaultDrmSessionManager.Builder.setPlayClearSamplesWithoutKeys`](https://developer.android.com/reference/androidx/media3/exoplayer/drm/DefaultDrmSessionManager.Builder#setPlayClearSamplesWithoutKeys\(boolean\)).
+*   IMA extension:
+    *   Fix issue where DASH and HLS ads without the appropriate file extension
+        can't be played.
+*   Session:
+    *   Disable double-click detection for TV apps
+        ([#962](https://github.com/androidx/media/issues/962)).
+    *   Fix issue where `MediaItem.RequestMetadata` with just non-null extras is
+        not transmitted between media controllers and sessions.
+    *   Add constructor to `MediaLibrarySession.Builder` that only takes a
+        `Context` instead of a `MediaLibraryService`.
+*   HLS Extension:
+    *   Reduce `HlsMediaPeriod` to package-private visibility. This type
+        shouldn't be directly depended on from outside the HLS package.
+    *   Resolve seeks to beginning of a segment more efficiently
+        ([#1031](https://github.com/androidx/media/pull/1031)).
+*   Decoder Extensions (FFmpeg, VP9, AV1, MIDI, etc.):
+    *   MIDI decoder: Ignore SysEx event messages
+        ([#710](https://github.com/androidx/media/pull/710)).
+*   Test Utilities:
+    *   Don't pause playback in `TestPlayerRunHelper.playUntilPosition`. The
+        test keeps the playback in a playing state, but suspends progress until
+        the test is able to add assertions and further actions.
+*   Demo app:
+    *   Add a shortform demo module to demo the usage of `PreloadMediaSource`
+        with the short-form content use case.
+
+### 1.3.0-rc01 (2024-02-22)
+
+Use the 1.3.0 [stable version](#130-2024-03-06).
+
+### 1.3.0-beta01 (2024-02-07)
+
+Use the 1.3.0 [stable version](#130-2024-03-06).
+
+### 1.3.0-alpha01 (2024-01-15)
+
+Use the 1.3.0 [stable version](#130-2024-03-06).
+
 ## 1.2
 
 ### 1.2.1 (2024-01-09)

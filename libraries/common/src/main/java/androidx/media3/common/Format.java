@@ -20,7 +20,7 @@ import static java.lang.annotation.ElementType.TYPE_USE;
 import android.os.Bundle;
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
-import androidx.media3.common.util.BundleableUtil;
+import androidx.media3.common.util.BundleCollectionUtil;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.util.Util;
 import com.google.common.base.Joiner;
@@ -42,8 +42,8 @@ import java.util.UUID;
  *
  * <p>When building formats, populate all fields whose values are known and relevant to the type of
  * format being constructed. For information about different types of format, see ExoPlayer's <a
- * href="https://developer.android.com/guide/topics/media/exoplayer/supported-formats">Supported
- * formats page</a>.
+ * href="https://developer.android.com/media/media3/exoplayer/supported-formats">Supported formats
+ * page</a>.
  *
  * <h2>Fields commonly relevant to all formats</h2>
  *
@@ -396,7 +396,7 @@ public final class Format implements Bundleable {
      */
     @CanIgnoreReturnValue
     public Builder setContainerMimeType(@Nullable String containerMimeType) {
-      this.containerMimeType = containerMimeType;
+      this.containerMimeType = MimeTypes.normalizeMimeType(containerMimeType);
       return this;
     }
 
@@ -410,7 +410,7 @@ public final class Format implements Bundleable {
      */
     @CanIgnoreReturnValue
     public Builder setSampleMimeType(@Nullable String sampleMimeType) {
-      this.sampleMimeType = sampleMimeType;
+      this.sampleMimeType = MimeTypes.normalizeMimeType(sampleMimeType);
       return this;
     }
 
@@ -998,6 +998,8 @@ public final class Format implements Bundleable {
 
     // Use manifest value only.
     @Nullable String id = manifestFormat.id;
+    int tileCountHorizontal = manifestFormat.tileCountHorizontal;
+    int tileCountVertical = manifestFormat.tileCountVertical;
 
     // Prefer manifest values, but fill in from sample format if missing.
     @Nullable String label = manifestFormat.label != null ? manifestFormat.label : this.label;
@@ -1051,6 +1053,8 @@ public final class Format implements Bundleable {
         .setMetadata(metadata)
         .setDrmInitData(drmInitData)
         .setFrameRate(frameRate)
+        .setTileCountHorizontal(tileCountHorizontal)
+        .setTileCountVertical(tileCountVertical)
         .build();
   }
 
@@ -1281,71 +1285,13 @@ public final class Format implements Bundleable {
       builder.append(", label=").append(format.label);
     }
     if (format.selectionFlags != 0) {
-      List<String> selectionFlags = new ArrayList<>();
-      // LINT.IfChange(selection_flags)
-      if ((format.selectionFlags & C.SELECTION_FLAG_AUTOSELECT) != 0) {
-        selectionFlags.add("auto");
-      }
-      if ((format.selectionFlags & C.SELECTION_FLAG_DEFAULT) != 0) {
-        selectionFlags.add("default");
-      }
-      if ((format.selectionFlags & C.SELECTION_FLAG_FORCED) != 0) {
-        selectionFlags.add("forced");
-      }
       builder.append(", selectionFlags=[");
-      Joiner.on(',').appendTo(builder, selectionFlags);
+      Joiner.on(',').appendTo(builder, Util.getSelectionFlagStrings(format.selectionFlags));
       builder.append("]");
     }
     if (format.roleFlags != 0) {
-      // LINT.IfChange(role_flags)
-      List<String> roleFlags = new ArrayList<>();
-      if ((format.roleFlags & C.ROLE_FLAG_MAIN) != 0) {
-        roleFlags.add("main");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_ALTERNATE) != 0) {
-        roleFlags.add("alt");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_SUPPLEMENTARY) != 0) {
-        roleFlags.add("supplementary");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_COMMENTARY) != 0) {
-        roleFlags.add("commentary");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_DUB) != 0) {
-        roleFlags.add("dub");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_EMERGENCY) != 0) {
-        roleFlags.add("emergency");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_CAPTION) != 0) {
-        roleFlags.add("caption");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_SUBTITLE) != 0) {
-        roleFlags.add("subtitle");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_SIGN) != 0) {
-        roleFlags.add("sign");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_DESCRIBES_VIDEO) != 0) {
-        roleFlags.add("describes-video");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_DESCRIBES_MUSIC_AND_SOUND) != 0) {
-        roleFlags.add("describes-music");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_ENHANCED_DIALOG_INTELLIGIBILITY) != 0) {
-        roleFlags.add("enhanced-intelligibility");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_TRANSCRIBES_DIALOG) != 0) {
-        roleFlags.add("transcribes-dialog");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_EASY_TO_READ) != 0) {
-        roleFlags.add("easy-read");
-      }
-      if ((format.roleFlags & C.ROLE_FLAG_TRICK_PLAY) != 0) {
-        roleFlags.add("trick-play");
-      }
       builder.append(", roleFlags=[");
-      Joiner.on(',').appendTo(builder, roleFlags);
+      Joiner.on(',').appendTo(builder, Util.getRoleFlagStrings(format.roleFlags));
       builder.append("]");
     }
     return builder.toString();
@@ -1450,12 +1396,21 @@ public final class Format implements Bundleable {
     return bundle;
   }
 
-  /** Object that can restore {@code Format} from a {@link Bundle}. */
-  @UnstableApi public static final Creator<Format> CREATOR = Format::fromBundle;
+  /**
+   * Object that can restore {@code Format} from a {@link Bundle}.
+   *
+   * @deprecated Use {@link #fromBundle} instead.
+   */
+  @UnstableApi
+  @Deprecated
+  @SuppressWarnings("deprecation") // Deprecated instance of deprecated class
+  public static final Creator<Format> CREATOR = Format::fromBundle;
 
-  private static Format fromBundle(Bundle bundle) {
+  /** Restores a {@code Format} from a {@link Bundle}. */
+  @UnstableApi
+  public static Format fromBundle(Bundle bundle) {
     Builder builder = new Builder();
-    BundleableUtil.ensureClassLoader(bundle);
+    BundleCollectionUtil.ensureClassLoader(bundle);
     builder
         .setId(defaultIfNull(bundle.getString(FIELD_ID), DEFAULT.id))
         .setLabel(defaultIfNull(bundle.getString(FIELD_LABEL), DEFAULT.label))
@@ -1497,7 +1452,7 @@ public final class Format implements Bundleable {
         .setStereoMode(bundle.getInt(FIELD_STEREO_MODE, DEFAULT.stereoMode));
     Bundle colorInfoBundle = bundle.getBundle(FIELD_COLOR_INFO);
     if (colorInfoBundle != null) {
-      builder.setColorInfo(ColorInfo.CREATOR.fromBundle(colorInfoBundle));
+      builder.setColorInfo(ColorInfo.fromBundle(colorInfoBundle));
     }
     // Audio specific.
     builder

@@ -120,6 +120,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
   private boolean audioSinkNeedsReset;
 
   @Nullable private WakeupListener wakeupListener;
+  private boolean hasPendingReportedSkippedSilence;
 
   /**
    * @param context A context.
@@ -146,21 +147,15 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
         mediaCodecSelector,
         eventHandler,
         eventListener,
-        AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES);
+        new DefaultAudioSink.Builder(context).build());
   }
 
   /**
-   * @param context A context.
-   * @param mediaCodecSelector A decoder selector.
-   * @param eventHandler A handler to use when delivering events to {@code eventListener}. May be
-   *     null if delivery of events is not required.
-   * @param eventListener A listener of events. May be null if delivery of events is not required.
-   * @param audioCapabilities The audio capabilities for playback on this device. Use {@link
-   *     AudioCapabilities#DEFAULT_AUDIO_CAPABILITIES} if default capabilities (no encoded audio
-   *     passthrough support) should be assumed.
-   * @param audioProcessors Optional {@link AudioProcessor}s that will process PCM audio before
-   *     output.
+   * @deprecated Use a constructor without {@link AudioCapabilities}. These are obtained
+   *     automatically from the {@link Context}.
    */
+  @SuppressWarnings("deprecation") // Calling deprecated method for compatibility
+  @Deprecated
   public MediaCodecAudioRenderer(
       Context context,
       MediaCodecSelector mediaCodecSelector,
@@ -620,6 +615,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
     audioSink.flush();
 
     currentPositionUs = positionUs;
+    hasPendingReportedSkippedSilence = false;
     allowPositionDiscontinuity = true;
   }
 
@@ -653,6 +649,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
 
   @Override
   protected void onReset() {
+    hasPendingReportedSkippedSilence = false;
     try {
       super.onReset();
     } finally {
@@ -684,6 +681,13 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
       updateCurrentPosition();
     }
     return currentPositionUs;
+  }
+
+  @Override
+  public boolean hasSkippedSilenceSinceLastCall() {
+    boolean hasPendingReportedSkippedSilence = this.hasPendingReportedSkippedSilence;
+    this.hasPendingReportedSkippedSilence = false;
+    return hasPendingReportedSkippedSilence;
   }
 
   @Override
@@ -987,6 +991,11 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
     @Override
     public void onPositionDiscontinuity() {
       MediaCodecAudioRenderer.this.onPositionDiscontinuity();
+    }
+
+    @Override
+    public void onSilenceSkipped() {
+      hasPendingReportedSkippedSilence = true;
     }
 
     @Override

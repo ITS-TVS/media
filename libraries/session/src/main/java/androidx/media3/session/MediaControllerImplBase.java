@@ -73,7 +73,7 @@ import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.common.text.CueGroup;
-import androidx.media3.common.util.BundleableUtil;
+import androidx.media3.common.util.BundleCollectionUtil;
 import androidx.media3.common.util.Clock;
 import androidx.media3.common.util.ListenerSet;
 import androidx.media3.common.util.Log;
@@ -808,7 +808,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
                 controllerStub,
                 seq,
                 new BundleListRetriever(
-                    BundleableUtil.toBundleList(
+                    BundleCollectionUtil.toBundleList(
                         mediaItems, MediaItem::toBundleIncludeLocalConfiguration))));
 
     setMediaItemsInternal(
@@ -830,7 +830,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
                 controllerStub,
                 seq,
                 new BundleListRetriever(
-                    BundleableUtil.toBundleList(
+                    BundleCollectionUtil.toBundleList(
                         mediaItems, MediaItem::toBundleIncludeLocalConfiguration)),
                 resetPosition));
 
@@ -853,7 +853,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
                 controllerStub,
                 seq,
                 new BundleListRetriever(
-                    BundleableUtil.toBundleList(
+                    BundleCollectionUtil.toBundleList(
                         mediaItems, MediaItem::toBundleIncludeLocalConfiguration)),
                 startIndex,
                 startPositionMs));
@@ -928,7 +928,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
                 controllerStub,
                 seq,
                 new BundleListRetriever(
-                    BundleableUtil.toBundleList(
+                    BundleCollectionUtil.toBundleList(
                         mediaItems, MediaItem::toBundleIncludeLocalConfiguration))));
 
     addMediaItemsInternal(getCurrentTimeline().getWindowCount(), mediaItems);
@@ -948,7 +948,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
                 seq,
                 index,
                 new BundleListRetriever(
-                    BundleableUtil.toBundleList(
+                    BundleCollectionUtil.toBundleList(
                         mediaItems, MediaItem::toBundleIncludeLocalConfiguration))));
 
     addMediaItemsInternal(index, mediaItems);
@@ -1261,7 +1261,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
         (iSession, seq) -> {
           IBinder mediaItemsBundleBinder =
               new BundleListRetriever(
-                  BundleableUtil.toBundleList(
+                  BundleCollectionUtil.toBundleList(
                       mediaItems, MediaItem::toBundleIncludeLocalConfiguration));
           if (checkNotNull(connectedToken).getInterfaceVersion() >= 2) {
             iSession.replaceMediaItems(
@@ -1525,6 +1525,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
   /**
    * @deprecated Use {@link #setDeviceVolume(int, int)} instead.
    */
+  @SuppressWarnings("deprecation") // Checking deprecated command codes
   @Deprecated
   @Override
   public void setDeviceVolume(int volume) {
@@ -1573,6 +1574,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
   /**
    * @deprecated Use {@link #increaseDeviceVolume(int)} instead.
    */
+  @SuppressWarnings("deprecation") // Checking deprecated command codes
   @Deprecated
   @Override
   public void increaseDeviceVolume() {
@@ -1617,6 +1619,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
   /**
    * @deprecated Use {@link #decreaseDeviceVolume(int)} instead.
    */
+  @SuppressWarnings("deprecation") // Checking deprecated command codes
   @Deprecated
   @Override
   public void decreaseDeviceVolume() {
@@ -1659,6 +1662,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
   /**
    * @deprecated Use {@link #setDeviceMuted(boolean, int)} instead.
    */
+  @SuppressWarnings("deprecation") // Checking deprecated command codes
   @Deprecated
   @Override
   public void setDeviceMuted(boolean muted) {
@@ -1927,6 +1931,11 @@ import org.checkerframework.checker.nullness.qual.NonNull;
   @Nullable
   public MediaBrowserCompat getBrowserCompat() {
     return null;
+  }
+
+  @Override
+  public IMediaController getBinder() {
+    return controllerStub;
   }
 
   private static Timeline createMaskingTimeline(List<Window> windows, List<Period> periods) {

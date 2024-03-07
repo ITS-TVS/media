@@ -56,8 +56,12 @@ public final class Composition {
      *
      * @see Builder#Builder(List)
      */
-    public Builder(EditedMediaItemSequence... sequences) {
-      this(ImmutableList.copyOf(sequences));
+    public Builder(EditedMediaItemSequence sequence, EditedMediaItemSequence... sequences) {
+      this(
+          new ImmutableList.Builder<EditedMediaItemSequence>()
+              .add(sequence)
+              .add(sequences)
+              .build());
     }
 
     /**
@@ -104,6 +108,8 @@ public final class Composition {
      * Sets the {@link Effects} to apply to the {@link Composition}.
      *
      * <p>The default value is {@link Effects#EMPTY}.
+     *
+     * <p>This only works with the {@code Presentation} effect.
      *
      * @param effects The {@link Composition} {@link Effects}.
      * @return This builder.

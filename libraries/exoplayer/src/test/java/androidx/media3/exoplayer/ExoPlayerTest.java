@@ -4990,8 +4990,10 @@ public final class ExoPlayerTest {
         new AdPlaybackState(/* adsId= */ new Object(), /* adGroupTimesUs...= */ 0);
     adPlaybackState = adPlaybackState.withAdCount(/* adGroupIndex= */ 0, /* adCount= */ 1);
     adPlaybackState =
-        adPlaybackState.withAvailableAdUri(
-            /* adGroupIndex= */ 0, /* adIndexInAdGroup= */ 0, Uri.parse("https://google.com/ad"));
+        adPlaybackState.withAvailableAdMediaItem(
+            /* adGroupIndex= */ 0,
+            /* adIndexInAdGroup= */ 0,
+            MediaItem.fromUri("https://google.com/ad"));
     long[][] durationsUs = new long[1][];
     durationsUs[0] = new long[] {Util.msToUs(adDurationMs)};
     adPlaybackState = adPlaybackState.withAdDurationsUs(durationsUs);
@@ -5092,8 +5094,10 @@ public final class ExoPlayerTest {
         new AdPlaybackState(/* adsId= */ new Object(), /* adGroupTimesUs...= */ 0);
     adPlaybackState = adPlaybackState.withAdCount(/* adGroupIndex= */ 0, /* adCount= */ 1);
     adPlaybackState =
-        adPlaybackState.withAvailableAdUri(
-            /* adGroupIndex= */ 0, /* adIndexInAdGroup= */ 0, Uri.parse("https://google.com/ad"));
+        adPlaybackState.withAvailableAdMediaItem(
+            /* adGroupIndex= */ 0,
+            /* adIndexInAdGroup= */ 0,
+            MediaItem.fromUri("https://google.com/ad"));
     long[][] durationsUs = new long[1][];
     durationsUs[0] = new long[] {Util.msToUs(adDurationMs)};
     adPlaybackState = adPlaybackState.withAdDurationsUs(durationsUs);
@@ -5174,10 +5178,10 @@ public final class ExoPlayerTest {
     AdPlaybackState adPlaybackState =
         new AdPlaybackState(/* adsId= */ new Object(), /* adGroupTimesUs...= */ 0)
             .withAdCount(/* adGroupIndex= */ 0, /* adCount= */ 1)
-            .withAvailableAdUri(
+            .withAvailableAdMediaItem(
                 /* adGroupIndex= */ 0,
                 /* adIndexInAdGroup= */ 0,
-                Uri.parse("https://google.com/ad"));
+                MediaItem.fromUri("https://google.com/ad"));
     long[][] durationsUs = new long[1][];
     durationsUs[0] = new long[] {Util.msToUs(adDurationMs)};
     adPlaybackState = adPlaybackState.withAdDurationsUs(durationsUs);
@@ -9506,10 +9510,10 @@ public final class ExoPlayerTest {
     AdPlaybackState adPlaybackState =
         new AdPlaybackState(/* adsId= */ new Object(), /* adGroupTimesUs...= */ 0)
             .withAdCount(/* adGroupIndex= */ 0, /* adCount= */ 1)
-            .withAvailableAdUri(
+            .withAvailableAdMediaItem(
                 /* adGroupIndex= */ 0,
                 /* adIndexInAdGroup= */ 0,
-                Uri.parse("https://google.com/ad"))
+                MediaItem.fromUri("https://google.com/ad"))
             .withAdDurationsUs(/* adDurationUs= */ new long[][] {{Util.msToUs(4_000)}});
     Timeline adTimeline =
         new FakeTimeline(
@@ -14103,6 +14107,80 @@ public final class ExoPlayerTest {
   }
 
   @Test
+  public void silenceSkipped_playerEmitOnPositionDiscontinuity() throws Exception {
+    Timeline timeline =
+        new FakeTimeline(
+            new TimelineWindowDefinition(
+                /* periodCount= */ 1,
+                /* id= */ 0,
+                /* isSeekable= */ true,
+                /* isDynamic= */ false,
+                /* isLive= */ false,
+                /* isPlaceholder= */ false,
+                /* durationUs= */ 10 * C.MICROS_PER_SECOND,
+                /* defaultPositionUs= */ 0,
+                /* windowOffsetInFirstPeriodUs= */ 0,
+                AdPlaybackState.NONE));
+    FakeMediaClockRenderer audioRenderer =
+        new FakeMediaClockRenderer(C.TRACK_TYPE_AUDIO) {
+          private long offsetUs;
+          private long positionUs;
+          private boolean hasPendingReportedSkippedSilence;
+
+          @Override
+          protected void onStreamChanged(
+              Format[] formats, long startPositionUs, long offsetUs, MediaPeriodId mediaPeriodId) {
+            this.offsetUs = offsetUs;
+            this.positionUs = offsetUs;
+          }
+
+          @Override
+          public long getPositionUs() {
+            // Continuously increase position to let playback progress, and simulate the silence
+            // skip until it reaches some points of time.
+            if (positionUs - offsetUs == 10_000) {
+              hasPendingReportedSkippedSilence = true;
+              positionUs += 30_000;
+            } else {
+              positionUs += 10_000;
+            }
+            return positionUs;
+          }
+
+          @Override
+          public boolean hasSkippedSilenceSinceLastCall() {
+            boolean hasPendingReportedSkippedSilence = this.hasPendingReportedSkippedSilence;
+            if (hasPendingReportedSkippedSilence) {
+              this.hasPendingReportedSkippedSilence = false;
+            }
+            return hasPendingReportedSkippedSilence;
+          }
+
+          @Override
+          public void setPlaybackParameters(PlaybackParameters playbackParameters) {}
+
+          @Override
+          public PlaybackParameters getPlaybackParameters() {
+            return PlaybackParameters.DEFAULT;
+          }
+        };
+    ExoPlayer player = new TestExoPlayerBuilder(context).setRenderers(audioRenderer).build();
+    Player.Listener mockPlayerListener = mock(Player.Listener.class);
+    player.addListener(mockPlayerListener);
+
+    player.setMediaSource(new FakeMediaSource(timeline, ExoPlayerTestRunner.AUDIO_FORMAT));
+    player.prepare();
+    player.play();
+    runUntilPlaybackState(player, Player.STATE_ENDED);
+
+    verify(mockPlayerListener)
+        .onPositionDiscontinuity(any(), any(), eq(Player.DISCONTINUITY_REASON_SILENCE_SKIP));
+    assertThat(audioRenderer.isEnded).isTrue();
+
+    player.release();
+  }
+
+  @Test
   public void seekToZeroAndTrackSelection_withNonZeroDefaultPosition_startsPlaybackAtZero()
       throws Exception {
     // Create a timeline with a non-zero default position. It's important to use a
@@ -14147,6 +14225,41 @@ public final class ExoPlayerTest {
 
     assertThat(positionAfterPrepare).isEqualTo(9000);
     assertThat(positionAfterSeek).isEqualTo(0);
+  }
+
+  @Test
+  public void repeatingItemWithSameStaticMetadata_keepsMetadata() throws Exception {
+    Format formatWithStaticMetadata =
+        new Format.Builder()
+            .setSampleMimeType(MimeTypes.VIDEO_H264)
+            .setMetadata(
+                new Metadata(
+                    new BinaryFrame(/* id= */ "", /* data= */ new byte[0]),
+                    new TextInformationFrame(
+                        /* id= */ "TT2",
+                        /* description= */ null,
+                        /* values= */ ImmutableList.of("title"))))
+            .build();
+    ExoPlayer player = new TestExoPlayerBuilder(context).build();
+    player.setMediaSource(new FakeMediaSource(new FakeTimeline(), formatWithStaticMetadata));
+    player.prepare();
+    player.setRepeatMode(Player.REPEAT_MODE_ONE);
+    player.play();
+
+    // Wait until item repeats.
+    runUntilPositionDiscontinuity(player, Player.DISCONTINUITY_REASON_AUTO_TRANSITION);
+    MediaMetadata metadataAfterTransition = player.getMediaMetadata();
+    player.release();
+
+    assertThat(metadataAfterTransition.title).isEqualTo("title");
+  }
+
+  @Test
+  public void setVideoEffects_failsWithoutLibEffectsDep() {
+    ExoPlayer player = new TestExoPlayerBuilder(context).build();
+    IllegalStateException expected =
+        assertThrows(IllegalStateException.class, () -> player.setVideoEffects(ImmutableList.of()));
+    assertThat(expected).hasMessageThat().contains("lib-effect dependencies");
   }
 
   // Internal methods.
