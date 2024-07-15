@@ -17,11 +17,13 @@ package androidx.media3.exoplayer.drm;
 
 import static androidx.media3.common.util.Assertions.checkNotNull;
 import static androidx.media3.exoplayer.drm.DefaultDrmSessionManager.MODE_PLAYBACK;
+import static androidx.media3.exoplayer.drm.FrameworkMediaDrm.newInstance;
 
 import androidx.annotation.GuardedBy;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.util.Log;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.common.util.Util;
 import androidx.media3.datasource.DataSource;
@@ -44,6 +46,7 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
 
   @Nullable private DataSource.Factory drmHttpDataSourceFactory;
   @Nullable private String userAgent;
+  private Boolean forceL3security = false;
 
   public DefaultDrmSessionManagerProvider() {
     lock = new Object();
@@ -58,6 +61,10 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
    */
   public void setDrmHttpDataSourceFactory(@Nullable DataSource.Factory drmDataSourceFactory) {
     this.drmHttpDataSourceFactory = drmDataSourceFactory;
+  }
+
+  public void setForceL3security(Boolean forceL3security) {
+    this.forceL3security = forceL3security;
   }
 
   /**
@@ -105,7 +112,18 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
     DefaultDrmSessionManager drmSessionManager =
         new DefaultDrmSessionManager.Builder()
             .setUuidAndExoMediaDrmProvider(
-                drmConfiguration.scheme, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                drmConfiguration.scheme,
+                uuid -> {
+                  try {
+                    FrameworkMediaDrm mediaDrm = newInstance(uuid);
+                    if(this.forceL3security) mediaDrm.setPropertyString("securityLevel", "L3");
+                    return mediaDrm;
+                  } catch (UnsupportedDrmException e) {
+                    Log.e("FrameworkMediaDrm", "Failed to instantiate a FrameworkMediaDrm for uuid: " + uuid + ".");
+                    return new DummyExoMediaDrm();
+                  }
+                }
+            )
             .setMultiSession(drmConfiguration.multiSession)
             .setPlayClearSamplesWithoutKeys(drmConfiguration.playClearContentWithoutKey)
             .setUseDrmSessionsForClearContent(
