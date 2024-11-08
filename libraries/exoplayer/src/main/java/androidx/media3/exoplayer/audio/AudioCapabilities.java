@@ -52,7 +52,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Represents the set of audio formats that a device is capable of playing. */
+/**
+ * Represents the set of audio formats that a device is capable of playing.
+ */
 @UnstableApi
 public final class AudioCapabilities {
 
@@ -61,11 +63,15 @@ public final class AudioCapabilities {
   @VisibleForTesting /* package */ static final int DEFAULT_MAX_CHANNEL_COUNT = 10;
   @VisibleForTesting /* package */ static final int DEFAULT_SAMPLE_RATE_HZ = 48_000;
 
-  /** The minimum audio capabilities supported by all devices. */
+  /**
+   * The minimum audio capabilities supported by all devices.
+   */
   public static final AudioCapabilities DEFAULT_AUDIO_CAPABILITIES =
       new AudioCapabilities(ImmutableList.of(AudioProfile.DEFAULT_AUDIO_PROFILE));
 
-  /** Encodings supported when the device specifies external surround sound. */
+  /**
+   * Encodings supported when the device specifies external surround sound.
+   */
   @SuppressLint("InlinedApi") // Compile-time access to integer constants defined in API 21.
   private static final ImmutableList<Integer> EXTERNAL_SURROUND_SOUND_ENCODINGS =
       ImmutableList.of(
@@ -88,7 +94,9 @@ public final class AudioCapabilities {
           .put(C.ENCODING_DOLBY_TRUEHD, 8)
           .buildOrThrow();
 
-  /** Global settings key for devices that can specify external surround sound. */
+  /**
+   * Global settings key for devices that can specify external surround sound.
+   */
   private static final String EXTERNAL_SURROUND_SOUND_KEY = "external_surround_sound_enabled";
 
   /**
@@ -109,10 +117,10 @@ public final class AudioCapabilities {
   /**
    * Returns the current audio capabilities.
    *
-   * @param context A context for obtaining the current audio capabilities.
+   * @param context         A context for obtaining the current audio capabilities.
    * @param audioAttributes The {@link AudioAttributes} to obtain capabilities for.
-   * @param routedDevice The {@link AudioDeviceInfo} audio will be routed to if known, or null to
-   *     assume the default route.
+   * @param routedDevice    The {@link AudioDeviceInfo} audio will be routed to if known, or null to
+   *                        assume the default route.
    * @return The current audio capabilities for the device.
    */
   public static AudioCapabilities getCapabilities(
@@ -250,7 +258,9 @@ public final class AudioCapabilities {
     return Util.contains(encodingToAudioProfile, encoding);
   }
 
-  /** Returns the maximum number of channels the device can play at the same time. */
+  /**
+   * Returns the maximum number of channels the device can play at the same time.
+   */
   public int getMaxChannelCount() {
     return maxChannelCount;
   }
@@ -263,14 +273,16 @@ public final class AudioCapabilities {
     return isPassthroughPlaybackSupported(format, AudioAttributes.DEFAULT);
   }
 
-  /** Returns whether the device can do passthrough playback for {@code format}. */
+  /**
+   * Returns whether the device can do passthrough playback for {@code format}.
+   */
   public boolean isPassthroughPlaybackSupported(Format format, AudioAttributes audioAttributes) {
     return getEncodingAndChannelConfigForPassthrough(format, audioAttributes) != null;
   }
 
   /**
    * @deprecated Use {@link #getEncodingAndChannelConfigForPassthrough(Format, AudioAttributes)}
-   *     instead.
+   * instead.
    */
   @Deprecated
   @Nullable
@@ -283,10 +295,10 @@ public final class AudioCapabilities {
    * passthrough mode for the specified {@link Format} and {@link AudioAttributes}. Returns {@code
    * null} if passthrough of the format is unsupported.
    *
-   * @param format The {@link Format}.
+   * @param format          The {@link Format}.
    * @param audioAttributes The {@link AudioAttributes}.
    * @return The encoding and channel config to use, or {@code null} if passthrough of the format is
-   *     unsupported.
+   * unsupported.
    */
   @Nullable
   public Pair<Integer, Integer> getEncodingAndChannelConfigForPassthrough(
@@ -449,13 +461,14 @@ public final class AudioCapabilities {
     public static final AudioProfile DEFAULT_AUDIO_PROFILE =
         (Util.SDK_INT >= 33)
             ? new AudioProfile(
-                C.ENCODING_PCM_16BIT,
-                getAllChannelMasksForMaxChannelCount(DEFAULT_MAX_CHANNEL_COUNT))
+            C.ENCODING_PCM_16BIT,
+            getAllChannelMasksForMaxChannelCount(DEFAULT_MAX_CHANNEL_COUNT))
             : new AudioProfile(C.ENCODING_PCM_16BIT, DEFAULT_MAX_CHANNEL_COUNT);
 
     public final @C.Encoding int encoding;
     public final int maxChannelCount;
-    @Nullable private final ImmutableSet<Integer> channelMasks;
+    @Nullable
+    private final ImmutableSet<Integer> channelMasks;
 
     @RequiresApi(33)
     public AudioProfile(@C.Encoding int encoding, Set<Integer> channelMasks) {
@@ -542,7 +555,9 @@ public final class AudioCapabilities {
 
   @RequiresApi(23)
   private static final class Api23 {
-    private Api23() {}
+
+    private Api23() {
+    }
 
     @DoNotInline
     public static boolean isBluetoothConnected(
@@ -551,7 +566,7 @@ public final class AudioCapabilities {
       AudioDeviceInfo[] audioDeviceInfos =
           currentDevice == null
               ? checkNotNull(audioManager).getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-              : new AudioDeviceInfo[] {currentDevice.audioDeviceInfo};
+              : new AudioDeviceInfo[]{currentDevice.audioDeviceInfo};
       ImmutableSet<Integer> allBluetoothDeviceTypesSet = getAllBluetoothDeviceTypes();
       for (AudioDeviceInfo audioDeviceInfo : audioDeviceInfos) {
         if (allBluetoothDeviceTypesSet.contains(audioDeviceInfo.getType())) {
@@ -589,7 +604,8 @@ public final class AudioCapabilities {
   @RequiresApi(29)
   private static final class Api29 {
 
-    private Api29() {}
+    private Api29() {
+    }
 
     @DoNotInline
     public static ImmutableList<Integer> getDirectPlaybackSupportedEncodings(
@@ -600,15 +616,26 @@ public final class AudioCapabilities {
           // Example: AudioFormat.ENCODING_DTS_UHD_P2 is supported only from API 34.
           continue;
         }
-        if (AudioTrack.isDirectPlaybackSupported(
-            new AudioFormat.Builder()
-                .setChannelMask(CHANNEL_OUT_STEREO)
-                .setEncoding(encoding)
-                .setSampleRate(DEFAULT_SAMPLE_RATE_HZ)
-                .build(),
-            audioAttributes.getAudioAttributesV21().audioAttributes)) {
+
+        boolean isDirectPlaybackSupported = true;
+
+        if (encoding == 7 || encoding == 8 || encoding == 14) {
+          isDirectPlaybackSupported = false;
+        }
+
+        if (isDirectPlaybackSupported) {
           supportedEncodingsListBuilder.add(encoding);
         }
+
+//        if (AudioTrack.isDirectPlaybackSupported(
+//            new AudioFormat.Builder()
+//                .setChannelMask(CHANNEL_OUT_STEREO)
+//                .setEncoding(encoding)
+//                .setSampleRate(DEFAULT_SAMPLE_RATE_HZ)
+//                .build(),
+//            audioAttributes.getAudioAttributesV21().audioAttributes)) {
+//          supportedEncodingsListBuilder.add(encoding);
+//        }
       }
       supportedEncodingsListBuilder.add(AudioFormat.ENCODING_PCM_16BIT);
       return supportedEncodingsListBuilder.build();
@@ -646,7 +673,8 @@ public final class AudioCapabilities {
   @RequiresApi(33)
   private static final class Api33 {
 
-    private Api33() {}
+    private Api33() {
+    }
 
     @DoNotInline
     public static AudioCapabilities getCapabilitiesInternalForDirectPlayback(

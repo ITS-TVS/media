@@ -162,8 +162,11 @@ public final class DefaultAudioOffloadSupportProvider
         AudioFormat audioFormat,
         android.media.AudioAttributes audioAttributes,
         boolean isOffloadVariableRateSupported) {
-      int playbackOffloadSupport =
-          AudioManager.getPlaybackOffloadSupport(audioFormat, audioAttributes);
+      int playbackOffloadSupport = AudioManager.PLAYBACK_OFFLOAD_NOT_SUPPORTED;
+      if(audioFormat.getEncoding() == 10) playbackOffloadSupport = AudioManager.PLAYBACK_OFFLOAD_NOT_SUPPORTED;
+      if(audioFormat.getEncoding() == 6) playbackOffloadSupport = AudioManager.PLAYBACK_OFFLOAD_SUPPORTED;
+//      int playbackOffloadSupport =
+//          AudioManager.getPlaybackOffloadSupport(audioFormat, audioAttributes);
       if (playbackOffloadSupport == AudioManager.PLAYBACK_OFFLOAD_NOT_SUPPORTED) {
         return AudioOffloadSupport.DEFAULT_UNSUPPORTED;
       }
