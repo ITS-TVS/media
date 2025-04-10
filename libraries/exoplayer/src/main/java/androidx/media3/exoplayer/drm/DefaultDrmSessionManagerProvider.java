@@ -48,7 +48,6 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
   @Nullable private String userAgent;
   @Nullable private LoadErrorHandlingPolicy drmLoadErrorHandlingPolicy;
 
-  private Boolean forceL3security = false;
 
   public DefaultDrmSessionManagerProvider() {
     lock = new Object();
@@ -65,9 +64,6 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
     this.drmHttpDataSourceFactory = drmDataSourceFactory;
   }
 
-  public void setForceL3security(Boolean forceL3security) {
-    this.forceL3security = forceL3security;
-  }
 
   /**
    * @deprecated Pass a custom {@link DataSource.Factory} to {@link
@@ -129,7 +125,7 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
                 uuid -> {
                   try {
                     FrameworkMediaDrm mediaDrm = newInstance(uuid);
-                    if(this.forceL3security) mediaDrm.setPropertyString("securityLevel", "L3");
+                    if (drmConfiguration.securityLevel != null) mediaDrm.setPropertyString("securityLevel", drmConfiguration.securityLevel);
                     return mediaDrm;
                   } catch (UnsupportedDrmException e) {
                     Log.e("FrameworkMediaDrm", "Failed to instantiate a FrameworkMediaDrm for uuid: " + uuid + ".");
