@@ -147,6 +147,7 @@ import androidx.media3.exoplayer.analytics.PlayerId;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.drm.DrmSessionEventListener;
 import androidx.media3.exoplayer.drm.DrmSessionManager;
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer;
 import androidx.media3.exoplayer.metadata.MetadataOutput;
 import androidx.media3.exoplayer.source.ClippingMediaSource;
 import androidx.media3.exoplayer.source.ConcatenatingMediaSource;
@@ -11787,6 +11788,54 @@ public class ExoPlayerTest {
   }
 
   @Test
+  public void enablingOffload_withFastReadingPeriodAdvancement_playerDoesNotSleep()
+      throws Exception {
+    FakeSleepRenderer sleepRenderer = new FakeSleepRenderer(C.TRACK_TYPE_AUDIO);
+    AtomicInteger sleepingForOffloadCounter = new AtomicInteger();
+    ExoPlayer player =
+        parameterizeTestExoPlayerBuilder(
+                new TestExoPlayerBuilder(context).setRenderers(sleepRenderer))
+            .build();
+    ExoPlayer.AudioOffloadListener listener =
+        new ExoPlayer.AudioOffloadListener() {
+          @Override
+          public void onSleepingForOffloadChanged(boolean sleepingForOffload) {
+            if (sleepingForOffload) {
+              sleepingForOffloadCounter.getAndIncrement();
+            }
+          }
+        };
+    player.addAudioOffloadListener(listener);
+    // Set a playlist of multiple, short audio-only items such that the reading period quickly
+    // advances past the playing period.
+    Timeline timeline = new FakeTimeline();
+    player.setMediaSources(
+        ImmutableList.of(
+            new FakeMediaSource(timeline, ExoPlayerTestRunner.AUDIO_FORMAT),
+            new FakeMediaSource(timeline, ExoPlayerTestRunner.AUDIO_FORMAT),
+            new FakeMediaSource(timeline, ExoPlayerTestRunner.AUDIO_FORMAT)));
+    player.setTrackSelectionParameters(
+        player
+            .getTrackSelectionParameters()
+            .buildUpon()
+            .setAudioOffloadPreferences(
+                new AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_REQUIRED)
+                    .build())
+            .build());
+    player.prepare();
+    player.play();
+    advance(player).untilStartOfMediaItem(/* mediaItemIndex= */ 1);
+
+    sleepRenderer.sleepOnNextRender();
+    runUntilPlaybackState(player, Player.STATE_ENDED);
+
+    assertThat(sleepingForOffloadCounter.get()).isEqualTo(0);
+
+    player.release();
+  }
+
+  @Test
   public void wakeupListenerWhileSleepingForOffload_isWokenUp_renderingResumes() throws Exception {
     FakeSleepRenderer sleepRenderer = new FakeSleepRenderer(C.TRACK_TYPE_AUDIO).sleepOnNextRender();
     ExoPlayer player =
@@ -16698,6 +16747,84 @@ public class ExoPlayerTest {
     assertThat(videoScalingSetOnVideoRenderer2.get()).isTrue();
     assertThat(videoScalingSetOnSecondaryAudioRenderer.get()).isFalse();
     assertThat(videoScalingSetOnSecondaryVideoRenderer.get()).isTrue();
+  }
+
+  @Test
+  public void
+      play_withRecoverableErrorAfterAdvancingReadingPeriod_advancesPlayingPeriodWhileErrorHandling()
+          throws Exception {
+    Clock fakeClock = new FakeClock(/* isAutoAdvancing= */ true);
+    AtomicBoolean shouldRendererThrowRecoverableError = new AtomicBoolean(false);
+    AtomicInteger onStreamChangedCount = new AtomicInteger(0);
+    ExoPlayer player =
+        new TestExoPlayerBuilder(context)
+            .setClock(fakeClock)
+            .setRenderersFactory(
+                new RenderersFactory() {
+                  @Override
+                  public Renderer[] createRenderers(
+                      Handler eventHandler,
+                      VideoRendererEventListener videoRendererEventListener,
+                      AudioRendererEventListener audioRendererEventListener,
+                      TextOutput textRendererOutput,
+                      MetadataOutput metadataRendererOutput) {
+                    return new Renderer[] {
+                      new FakeVideoRenderer(
+                          SystemClock.DEFAULT.createHandler(
+                              eventHandler.getLooper(), /* callback= */ null),
+                          videoRendererEventListener) {
+                        @Override
+                        protected void onStreamChanged(
+                            Format[] formats,
+                            long startPositionUs,
+                            long offsetUs,
+                            MediaSource.MediaPeriodId mediaPeriodId)
+                            throws ExoPlaybackException {
+                          super.onStreamChanged(formats, startPositionUs, offsetUs, mediaPeriodId);
+                          onStreamChangedCount.getAndIncrement();
+                        }
+
+                        @Override
+                        public void render(long positionUs, long elapsedRealtimeUs)
+                            throws ExoPlaybackException {
+                          if (!shouldRendererThrowRecoverableError.get()) {
+                            super.render(positionUs, elapsedRealtimeUs);
+                          } else {
+                            shouldRendererThrowRecoverableError.set(false);
+                            throw createRendererException(
+                                new MediaCodecRenderer.DecoderInitializationException(
+                                    new Format.Builder().build(),
+                                    new IllegalArgumentException(),
+                                    false,
+                                    0),
+                                this.getFormatHolder().format,
+                                true,
+                                PlaybackException.ERROR_CODE_DECODER_INIT_FAILED);
+                          }
+                        }
+                      }
+                    };
+                  }
+                })
+            .build();
+    player.setMediaSources(
+        ImmutableList.of(
+            new FakeMediaSource(new FakeTimeline(), ExoPlayerTestRunner.VIDEO_FORMAT),
+            new FakeMediaSource(new FakeTimeline(), ExoPlayerTestRunner.VIDEO_FORMAT)));
+    player.prepare();
+
+    // Play a bit until the reading period has advanced.
+    player.play();
+    advance(player).untilBackgroundThreadCondition(() -> onStreamChangedCount.get() == 2);
+    shouldRendererThrowRecoverableError.set(true);
+    runUntilPlaybackState(player, Player.STATE_ENDED);
+
+    player.release();
+
+    // onStreamChanged should occur thrice;
+    // 1 during first enable, 2 during replace stream, 3 during error recovery
+    assertThat(onStreamChangedCount.get()).isEqualTo(3);
+    assertThat(shouldRendererThrowRecoverableError.get()).isFalse();
   }
 
   // Internal methods.

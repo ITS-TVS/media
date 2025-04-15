@@ -22,6 +22,7 @@ import static androidx.media3.exoplayer.DecoderReuseEvaluation.REUSE_RESULT_NO;
 import static androidx.media3.exoplayer.source.SampleStream.FLAG_REQUIRE_FORMAT;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 import static java.lang.annotation.ElementType.TYPE_USE;
 
 import android.media.AudioDeviceInfo;
@@ -169,6 +170,7 @@ public abstract class DecoderAudioRenderer<
   private long largestQueuedPresentationTimeUs;
   private long lastBufferInStreamPresentationTimeUs;
   private long nextBufferToWritePresentationTimeUs;
+  private boolean isRendereringToEndOfStream;
 
   public DecoderAudioRenderer() {
     this(/* eventHandler= */ null, /* eventListener= */ null);
@@ -246,16 +248,28 @@ public abstract class DecoderAudioRenderer<
     if (nextBufferToWritePresentationTimeUs == C.TIME_UNSET) {
       return super.getDurationToProgressUs(positionUs, elapsedRealtimeUs);
     }
-    long durationUs =
+    long audioTrackBufferDurationUs = audioSink.getAudioTrackBufferSizeUs();
+    // Return default if getAudioTrackBufferSizeUs is unsupported and not in the midst of rendering
+    // to end of stream.
+    if (!isRendereringToEndOfStream && audioTrackBufferDurationUs == C.TIME_UNSET) {
+      return super.getDurationToProgressUs(positionUs, elapsedRealtimeUs);
+    }
+    // Compare written, yet-to-play content duration against the audio track buffer size.
+    long writtenDurationUs = (nextBufferToWritePresentationTimeUs - positionUs);
+    long bufferedDurationUs =
+        audioTrackBufferDurationUs != C.TIME_UNSET
+            ? min(audioTrackBufferDurationUs, writtenDurationUs)
+            : writtenDurationUs;
+    bufferedDurationUs =
         (long)
-            ((nextBufferToWritePresentationTimeUs - positionUs)
+            (bufferedDurationUs
                 / (getPlaybackParameters() != null ? getPlaybackParameters().speed : 1.0f)
                 / 2);
     if (isStarted) {
       // Account for the elapsed time since the start of this iteration of the rendering loop.
-      durationUs -= Util.msToUs(getClock().elapsedRealtime()) - elapsedRealtimeUs;
+      bufferedDurationUs -= Util.msToUs(getClock().elapsedRealtime()) - elapsedRealtimeUs;
     }
-    return max(DEFAULT_DURATION_TO_PROGRESS_US, durationUs);
+    return max(DEFAULT_DURATION_TO_PROGRESS_US, bufferedDurationUs);
   }
 
   @Override
@@ -304,6 +318,7 @@ public abstract class DecoderAudioRenderer<
       try {
         audioSink.playToEndOfStream();
         nextBufferToWritePresentationTimeUs = lastBufferInStreamPresentationTimeUs;
+        isRendereringToEndOfStream = true;
       } catch (AudioSink.WriteException e) {
         throw createRendererException(
             e, e.format, e.isRecoverable, PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED);
@@ -585,6 +600,7 @@ public abstract class DecoderAudioRenderer<
     outputStreamEnded = true;
     audioSink.playToEndOfStream();
     nextBufferToWritePresentationTimeUs = lastBufferInStreamPresentationTimeUs;
+    isRendereringToEndOfStream = true;
   }
 
   private void flushDecoder() throws ExoPlaybackException {
@@ -660,6 +676,7 @@ public abstract class DecoderAudioRenderer<
 
     currentPositionUs = positionUs;
     nextBufferToWritePresentationTimeUs = C.TIME_UNSET;
+    isRendereringToEndOfStream = false;
     hasPendingReportedSkippedSilence = false;
     allowPositionDiscontinuity = true;
     inputStreamEnded = false;
@@ -689,6 +706,7 @@ public abstract class DecoderAudioRenderer<
     setOutputStreamOffsetUs(C.TIME_UNSET);
     hasPendingReportedSkippedSilence = false;
     nextBufferToWritePresentationTimeUs = C.TIME_UNSET;
+    isRendereringToEndOfStream = false;
     try {
       setSourceDrmSession(null);
       releaseDecoder();

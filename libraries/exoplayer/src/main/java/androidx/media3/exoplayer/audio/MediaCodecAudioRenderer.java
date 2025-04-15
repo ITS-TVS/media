@@ -20,6 +20,7 @@ import static androidx.media3.exoplayer.DecoderReuseEvaluation.DISCARD_REASON_MA
 import static androidx.media3.exoplayer.DecoderReuseEvaluation.REUSE_RESULT_NO;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -125,6 +126,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
   private int rendererPriority;
   private boolean isStarted;
   private long nextBufferToWritePresentationTimeUs;
+  private boolean isRendereringToEndOfStream;
 
   /**
    * @param context A context.
@@ -518,20 +520,33 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
   @Override
   protected long getDurationToProgressUs(
       long positionUs, long elapsedRealtimeUs, boolean isOnBufferAvailableListenerRegistered) {
-    if (nextBufferToWritePresentationTimeUs != C.TIME_UNSET) {
-      long durationUs =
-          (long)
-              ((nextBufferToWritePresentationTimeUs - positionUs)
-                  / (getPlaybackParameters() != null ? getPlaybackParameters().speed : 1.0f)
-                  / 2);
-      if (isStarted) {
-        // Account for the elapsed time since the start of this iteration of the rendering loop.
-        durationUs -= Util.msToUs(getClock().elapsedRealtime()) - elapsedRealtimeUs;
-      }
-      return max(DEFAULT_DURATION_TO_PROGRESS_US, durationUs);
+    if (nextBufferToWritePresentationTimeUs == C.TIME_UNSET) {
+      return super.getDurationToProgressUs(
+          positionUs, elapsedRealtimeUs, isOnBufferAvailableListenerRegistered);
     }
-    return super.getDurationToProgressUs(
-        positionUs, elapsedRealtimeUs, isOnBufferAvailableListenerRegistered);
+    long audioTrackBufferDurationUs = audioSink.getAudioTrackBufferSizeUs();
+    // Return default if getAudioTrackBufferSizeUs is unsupported and not in the midst of rendering
+    // to end of stream.
+    if (!isRendereringToEndOfStream && audioTrackBufferDurationUs == C.TIME_UNSET) {
+      return super.getDurationToProgressUs(
+          positionUs, elapsedRealtimeUs, isOnBufferAvailableListenerRegistered);
+    }
+    // Compare written, yet-to-play content duration against the audio track buffer size.
+    long writtenDurationUs = (nextBufferToWritePresentationTimeUs - positionUs);
+    long bufferedDurationUs =
+        audioTrackBufferDurationUs != C.TIME_UNSET
+            ? min(audioTrackBufferDurationUs, writtenDurationUs)
+            : writtenDurationUs;
+    bufferedDurationUs =
+        (long)
+            (bufferedDurationUs
+                / (getPlaybackParameters() != null ? getPlaybackParameters().speed : 1.0f)
+                / 2);
+    if (isStarted) {
+      // Account for the elapsed time since the start of this iteration of the rendering loop.
+      bufferedDurationUs -= Util.msToUs(getClock().elapsedRealtime()) - elapsedRealtimeUs;
+    }
+    return max(DEFAULT_DURATION_TO_PROGRESS_US, bufferedDurationUs);
   }
 
   @Override
@@ -679,6 +694,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
 
     currentPositionUs = positionUs;
     nextBufferToWritePresentationTimeUs = C.TIME_UNSET;
+    isRendereringToEndOfStream = false;
     hasPendingReportedSkippedSilence = false;
     allowPositionDiscontinuity = true;
   }
@@ -703,6 +719,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
     audioSinkNeedsReset = true;
     inputFormat = null;
     nextBufferToWritePresentationTimeUs = C.TIME_UNSET;
+    isRendereringToEndOfStream = false;
     try {
       audioSink.flush();
     } finally {
@@ -718,6 +735,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
   protected void onReset() {
     hasPendingReportedSkippedSilence = false;
     nextBufferToWritePresentationTimeUs = C.TIME_UNSET;
+    isRendereringToEndOfStream = false;
     try {
       super.onReset();
     } finally {
@@ -857,6 +875,7 @@ public class MediaCodecAudioRenderer extends MediaCodecRenderer implements Media
       if (getLastBufferInStreamPresentationTimeUs() != C.TIME_UNSET) {
         nextBufferToWritePresentationTimeUs = getLastBufferInStreamPresentationTimeUs();
       }
+      isRendereringToEndOfStream = true;
     } catch (AudioSink.WriteException e) {
       throw createRendererException(
           e,
