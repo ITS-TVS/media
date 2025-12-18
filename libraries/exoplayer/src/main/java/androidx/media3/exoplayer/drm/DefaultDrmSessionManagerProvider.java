@@ -15,8 +15,8 @@
  */
 package androidx.media3.exoplayer.drm;
 
-import static androidx.media3.common.util.Assertions.checkNotNull;
 import static androidx.media3.exoplayer.drm.DefaultDrmSessionManager.MODE_PLAYBACK;
+import static com.google.common.base.Preconditions.checkNotNull;
 import static androidx.media3.exoplayer.drm.FrameworkMediaDrm.newInstance;
 
 import androidx.annotation.GuardedBy;
@@ -48,7 +48,6 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
   @Nullable private String userAgent;
   @Nullable private LoadErrorHandlingPolicy drmLoadErrorHandlingPolicy;
 
-
   public DefaultDrmSessionManagerProvider() {
     lock = new Object();
   }
@@ -63,7 +62,6 @@ public final class DefaultDrmSessionManagerProvider implements DrmSessionManager
   public void setDrmHttpDataSourceFactory(@Nullable DataSource.Factory drmDataSourceFactory) {
     this.drmHttpDataSourceFactory = drmDataSourceFactory;
   }
-
 
   /**
    * @deprecated Pass a custom {@link DataSource.Factory} to {@link
