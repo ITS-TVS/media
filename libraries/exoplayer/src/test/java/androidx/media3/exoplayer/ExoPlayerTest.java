@@ -12798,11 +12798,14 @@ public final class ExoPlayerTest {
     play(player).untilPositionAtLeast(/* mediaItemIndex= */ 1, /* positionMs= */ 500);
     player.pause();
     concatenatingMediaSource.removeMediaSource(1);
+    // Let the removal propagate through the internals of ConcatenatingMediaSource. We can't wait
+    // for a signal on the player itself as we want this update to overlap with the seek below.
+    Thread.sleep(100);
+    advance(player).untilPendingCommandsAreFullyHandled();
     player.seekTo(/* mediaItemIndex= */ 0, /* positionMs= */ 123);
     advance(player).untilPendingCommandsAreFullyHandled();
     concatenatingMediaSource.removeMediaSource(0);
-    player.play();
-    advance(player).untilState(Player.STATE_ENDED);
+    advance(player).untilTimelineChanges();
 
     ArgumentCaptor<Player.PositionInfo> oldPosition =
         ArgumentCaptor.forClass(Player.PositionInfo.class);
@@ -12821,16 +12824,14 @@ public final class ExoPlayerTest {
         .verify(listener)
         .onPositionDiscontinuity(
             oldPosition.capture(), newPosition.capture(), eq(Player.DISCONTINUITY_REASON_REMOVE));
-    // This fails once out of a hundred test runs due to a race condition whether the seek or the
-    // removal arrives first in EPI.
-    // inOrder.verify(listener, never()).onPositionDiscontinuity(any(), any(), anyInt());
+    inOrder.verify(listener, never()).onPositionDiscontinuity(any(), any(), anyInt());
     List<Player.PositionInfo> oldPositions = oldPosition.getAllValues();
     List<Player.PositionInfo> newPositions = newPosition.getAllValues();
     assertThat(player.getCurrentTimeline().getWindowCount()).isEqualTo(1);
     // seek discontinuity
     assertThat(oldPositions.get(0).mediaItemIndex).isEqualTo(1);
-    assertThat(oldPositions.get(0).positionMs).isEqualTo(500);
-    assertThat(oldPositions.get(0).contentPositionMs).isEqualTo(500);
+    assertThat(oldPositions.get(0).positionMs).isEqualTo(0);
+    assertThat(oldPositions.get(0).contentPositionMs).isEqualTo(0);
     assertThat(newPositions.get(0).mediaItemIndex).isEqualTo(0);
     assertThat(newPositions.get(0).positionMs).isEqualTo(123); // seek wins over remove
     assertThat(newPositions.get(0).contentPositionMs).isEqualTo(123);
@@ -16653,6 +16654,49 @@ public final class ExoPlayerTest {
 
     verify(listener, never())
         .onPositionDiscontinuity(any(), any(), eq(DISCONTINUITY_REASON_SEEK_ADJUSTMENT));
+  }
+
+  @Test
+  public void removeMediaItem_withRepeatModeOne_endsPlaybackAndStopsLoading() throws Exception {
+    ExoPlayer player = parameterizeTestExoPlayerBuilder(new TestExoPlayerBuilder(context)).build();
+    player.setMediaSources(ImmutableList.of(new FakeMediaSource(), new FakeMediaSource()));
+    player.setRepeatMode(Player.REPEAT_MODE_ONE);
+    player.prepare();
+
+    player.removeMediaItem(0);
+    boolean isLoadingAfterRemoval = player.isLoading();
+    @Player.State int stateAfterRemoval = player.getPlaybackState();
+    advance(player).untilPendingCommandsAreFullyHandled();
+    boolean isLoadingAfterFullyHandled = player.isLoading();
+    @Player.State int stateAfterFullyHandled = player.getPlaybackState();
+    player.release();
+
+    assertThat(isLoadingAfterRemoval).isFalse();
+    assertThat(isLoadingAfterFullyHandled).isFalse();
+    assertThat(stateAfterRemoval).isEqualTo(Player.STATE_ENDED);
+    assertThat(stateAfterFullyHandled).isEqualTo(Player.STATE_ENDED);
+  }
+
+  @Test
+  public void
+      removeMediaItem_withShuffleModeEnabledAndAvailableItemsWhenShuffling_continuesPlayback()
+          throws Exception {
+    ExoPlayer player = parameterizeTestExoPlayerBuilder(new TestExoPlayerBuilder(context)).build();
+    player.setMediaSources(ImmutableList.of(new FakeMediaSource(), new FakeMediaSource()));
+    player.setShuffleOrder(new FakeShuffleOrder(/* length= */ 2));
+    player.setShuffleModeEnabled(true);
+    player.seekToDefaultPosition(/* mediaItemIndex= */ 1);
+    player.prepare();
+    advance(player).untilState(Player.STATE_READY);
+
+    player.removeMediaItem(1);
+    @Player.State int stateAfterRemoval = player.getPlaybackState();
+    advance(player).untilPendingCommandsAreFullyHandled();
+    @Player.State int stateAfterFullyHandled = player.getPlaybackState();
+    player.release();
+
+    assertThat(stateAfterRemoval).isEqualTo(Player.STATE_READY);
+    assertThat(stateAfterFullyHandled).isEqualTo(Player.STATE_READY);
   }
 
   // Internal methods.

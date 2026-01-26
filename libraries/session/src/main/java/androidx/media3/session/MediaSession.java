@@ -734,6 +734,7 @@ public class MediaSession {
     }
 
     /** Returns a {@link ControllerInfo} suitable for use when testing client code. */
+    @UnstableApi
     @VisibleForTesting(otherwise = PRIVATE)
     public static ControllerInfo createTestOnlyControllerInfo(
         String packageName,
@@ -1550,6 +1551,9 @@ public class MediaSession {
      * the session. All session and player commands are made available and the {@linkplain
      * MediaSession#getMediaButtonPreferences() media button preferences of the session} are
      * included.
+     *
+     * <p>You can use {@link ControllerInfo#isTrusted()} to filter by system apps, apps with media
+     * control permissions, and your own app.
      *
      * <p>Note that the player commands in {@link ConnectionResult#availablePlayerCommands} will be
      * intersected with the {@link Player#getAvailableCommands() available commands} of the

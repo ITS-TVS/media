@@ -18,6 +18,7 @@ package androidx.media3.exoplayer.video;
 import static android.os.Build.VERSION.SDK_INT;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static androidx.media3.exoplayer.DecoderReuseEvaluation.DISCARD_REASON_MAX_INPUT_SIZE_EXCEEDED;
+import static androidx.media3.exoplayer.DecoderReuseEvaluation.DISCARD_REASON_VIDEO_FRAME_RATE_CHANGED;
 import static androidx.media3.exoplayer.DecoderReuseEvaluation.DISCARD_REASON_VIDEO_MAX_RESOLUTION_EXCEEDED;
 import static androidx.media3.exoplayer.DecoderReuseEvaluation.REUSE_RESULT_NO;
 import static androidx.media3.exoplayer.video.VideoSink.RELEASE_FIRST_FRAME_IMMEDIATELY;
@@ -582,6 +583,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   protected MediaCodecVideoRenderer(Builder builder) {
     super(
+        builder.context.getApplicationContext(),
         C.TRACK_TYPE_VIDEO,
         builder.codecAdapterFactory,
         builder.mediaCodecSelector,
@@ -717,13 +719,13 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
     // Check whether the first decoder supports the format. This is the preferred decoder for the
     // format's MIME type, according to the MediaCodecSelector.
     MediaCodecInfo decoderInfo = decoderInfos.get(0);
-    boolean isFormatSupported = decoderInfo.isFormatSupported(format);
+    boolean isFormatSupported = decoderInfo.isFormatSupported(context, format);
     boolean isPreferredDecoder = true;
     if (!isFormatSupported) {
       // Check whether any of the other decoders support the format.
       for (int i = 1; i < decoderInfos.size(); i++) {
         MediaCodecInfo otherDecoderInfo = decoderInfos.get(i);
-        if (otherDecoderInfo.isFormatSupported(format)) {
+        if (otherDecoderInfo.isFormatSupported(context, format)) {
           decoderInfo = otherDecoderInfo;
           isFormatSupported = true;
           isPreferredDecoder = false;
@@ -763,9 +765,10 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
               /* requiresTunnelingDecoder= */ true);
       if (!tunnelingDecoderInfos.isEmpty()) {
         MediaCodecInfo tunnelingDecoderInfo =
-            MediaCodecUtil.getDecoderInfosSortedByFormatSupport(tunnelingDecoderInfos, format)
+            MediaCodecUtil.getDecoderInfosSortedByFormatSupport(
+                    context, tunnelingDecoderInfos, format)
                 .get(0);
-        if (tunnelingDecoderInfo.isFormatSupported(format)
+        if (tunnelingDecoderInfo.isFormatSupported(context, format)
             && tunnelingDecoderInfo.isSeamlessAdaptationSupported(format)) {
           tunnelingSupport = TUNNELING_SUPPORTED;
         }
@@ -785,6 +788,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
       MediaCodecSelector mediaCodecSelector, Format format, boolean requiresSecureDecoder)
       throws DecoderQueryException {
     return MediaCodecUtil.getDecoderInfosSortedByFormatSupport(
+        context,
         getDecoderInfos(context, mediaCodecSelector, format, requiresSecureDecoder, tunneling),
         format);
   }
@@ -800,6 +804,7 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    * MediaCodecUtil#getDecoderInfosSortedByFormatSupport} can be used to further sort the list into
    * an order where decoders that fully support the format come first.
    *
+   * @param context A context.
    * @param mediaCodecSelector The decoder selector.
    * @param format The {@link Format} for which a decoder is required.
    * @param requiresSecureDecoder Whether a secure decoder is required.
@@ -1346,6 +1351,13 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
     }
     if (getMaxInputSize(codecInfo, newFormat) > codecMaxValues.inputSize) {
       discardReasons |= DISCARD_REASON_MAX_INPUT_SIZE_EXCEEDED;
+    }
+    if (changeFrameRateStrategy != C.VIDEO_CHANGE_FRAME_RATE_STRATEGY_OFF
+        && oldFormat.frameRate != Format.NO_VALUE
+        && newFormat.frameRate != Format.NO_VALUE
+        && Math.abs(newFormat.frameRate - oldFormat.frameRate) > 1f
+        && cannotChangeSurfaceFrameRateMidPlayback()) {
+      discardReasons |= DISCARD_REASON_VIDEO_FRAME_RATE_CHANGED;
     }
 
     return new DecoderReuseEvaluation(
@@ -2747,6 +2759,14 @@ public class MediaCodecVideoRenderer extends MediaCodecRenderer
    */
   private static int getMaxSampleSize(int pixelCount, int minCompressionRatio) {
     return (pixelCount * 3) / (2 * minCompressionRatio);
+  }
+
+  private static boolean cannotChangeSurfaceFrameRateMidPlayback() {
+    // We can't tell the surface about the new frame rate before API 30, so it's likely to keep
+    // the initially estimated screen refresh rate from the previous format.
+    // See https://github.com/androidx/media/issues/2941. MiTV boxes were also reported to
+    // still have this problem on API 30.
+    return SDK_INT < 30 || (SDK_INT == 30 && Build.MODEL.startsWith("MiTV"));
   }
 
   private static boolean evaluateDeviceNeedsSetOutputSurfaceWorkaround() {

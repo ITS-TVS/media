@@ -2,6 +2,95 @@
 
 ## 1.9
 
+### 1.9.1 (2026-01-26)
+
+This release includes the following changes since
+[1.9.0 release](#190-2025-12-17):
+
+*   Common Library:
+    *   Support date-time strings with only hours in the timezone offset
+        ([#2929](https://github.com/androidx/media/issues/2929)).
+*   ExoPlayer:
+    *   Allow dynamic scheduling to slow `doSomeWork` interval only after audio
+        starts to support smoother A/V sync at beginning of playback.
+    *   Fix bug in `DefaultLoadErrorHandlingPolicy` where
+        `FileNotFoundException` and similar exception types were retried
+        multiple times.
+    *   Fix bug with dynamic scheduling where the calculated time for the next
+        `doSomeWork` was mistakenly reduced by the elapsed time of the current
+        iteration of `doSomeWork`. Addressing this hopefully extends CPU idle
+        time and saves power.
+    *   Fix issue where some playbacks of Dolby Vision files fail when
+        attempting to use a fallback AVC or HEVC codec.
+    *   Fix bug where loading continues after playback ended when removing the
+        currently playing item from a playlist
+        ([#2873](https://github.com/androidx/media/issues/2873)).
+    *   Avoid leaking `MediaItem` instances when repeatedly using
+        `ExoPlayer.replaceMediaItem` on the same item
+        ([#2993](https://github.com/androidx/media/issues/2993)).
+    *   Prevent potential ANRs caused by emergency wake lock releases
+        ([#2979](https://github.com/androidx/media/issues/2979)).
+*   Extractors:
+    *   MP3: Parse LAME ReplayGain data
+        ([#2840](https://github.com/androidx/media/pull/2840)).
+*   Audio:
+    *   Correctly remove support for `AC4Profile22` and other legacy profiles
+        when assessing AC-4 decoder support in Automotive scenarios
+        ([#2609](https://github.com/androidx/media/pull/2609)).
+*   Video:
+    *   Discard video codecs on devices below API 30 when the content frame rate
+        changes to avoid stuttering playback
+        ([#2941](https://github.com/androidx/media/issues/2941)).
+*   Text:
+    *   VobSub: Fix some missing subtitles by correctly handling SPUs that
+        either contain only a single control sequence, or have critical info
+        split across multiple control sequences
+        ([#2935](https://github.com/androidx/media/issues/2935)).
+*   IMA extension:
+    *   Bug fix: Corrected an issue where the ad MIME type did not match the
+        MIME type provided in the IMA LOADED event. The fix now maps the ad MIME
+        type using the ad pod index and ad position.
+    *   Add a null check before accessing result of `getAdsManager()` and
+        `AdEvent.getAd()`.
+*   Session:
+    *   Fix bug where stopping a `MediaController` connected to a platform
+        session crashed the app if stop happened during ad playback
+        ([#2948](https://github.com/androidx/media/issues/2948)).
+    *   Add additional verifications on `extras` `Bundle` instances in various
+        classes to guard against malformed `Bundle` instances sent from other
+        processes.
+    *   Fix issue where missing commands for `COMMAND_SEEK_NEXT` or
+        `COMMAND_SEEK_BACK` can cause gaps in the system media notification
+        ([#2976](https://github.com/androidx/media/issues/2976)).
+    *   Move bitmap scaling for notification icon off the main thread
+        ([#2829](https://github.com/androidx/media/issues/2829)).
+    *   Fix bug where author, writer and composer were not used as a fallback
+        when converting from legacy `MediaMetadataCompat` and
+        `MediaDescriptionCompat`
+        ([#3018](https://github.com/androidx/media/issues/3018)).
+*   Downloads:
+    *   Fix potential infinite loops when a `PriorityTooLowException` is handled
+        by `SegmentDownloader` (for DASH, HLS and SmoothStreaming). Custom
+        overrides of `SegmentDownloader` using the protected `execute` method
+        need to provide their task wrapped in a `Supplier` so it can be
+        recreated ([#2931](https://github.com/androidx/media/issues/2931)).
+*   HLS extension:
+    *   Pass the raw asset list JSON document to
+        `Listener.onAssetListLoadCompleted` callback. This is a breaking change
+        in an unstable API that requires apps that implement this callback to
+        add an additional argument of type `JSONObject`
+        ([#2950](https://github.com/androidx/media/issues/2950)).
+*   RTSP extension:
+    *   Correctly handle RTP Packets with timestamps that wrap around
+        ([#2930](https://github.com/androidx/media/issues/2930)).
+*   Decoder extensions (FFmpeg, VP9, AV1, etc.):
+    *   Fix potential `NullPointerException` that can occur when seeking prior
+        to processing the first video frame
+        ([#2965](https://github.com/androidx/media/issues/2965)).
+*   Cast extension:
+    *   Fix bug preventing the `RemoteCastPlayer` timeline from updating
+        correctly when replacing the playlist.
+
 ### 1.9.0 (2025-12-17)
 
 *   Common Library:
