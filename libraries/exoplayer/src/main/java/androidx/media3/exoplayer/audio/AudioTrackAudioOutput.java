@@ -499,9 +499,10 @@ public final class AudioTrackAudioOutput implements AudioOutput {
                           boolean prcGuard = listeners.isRunningOnCorrectThread();
                           Log.w(TAG, "PRCDBG onReleased dispatch guard=" + prcGuard
                           + " postThread=" + Thread.currentThread().getName());
-                          if (prcGuard) {
-                            listeners.sendEvent(Listener::onReleased);
-                          }
+//                          if (prcGuard) {
+//                            listeners.sendEvent(Listener::onReleased);
+//                          }
+                          listeners.sendEvent(Listener::onReleased);
                         });
                   }
                   synchronized (releaseExecutorLock) {
