@@ -490,10 +490,16 @@ public final class AudioTrackAudioOutput implements AudioOutput {
                   audioTrack.flush();
                   audioTrack.release();
                 } finally {
-                  if (audioTrackThreadHandler.getLooper().getThread().isAlive()) {
+                  boolean prcAlive = audioTrackThreadHandler.getLooper().getThread().isAlive();
+                  Log.w(TAG, "PRCDBG release-complete aliveHandler=" + prcAlive
+                  + " execThread=" + Thread.currentThread().getName());
+                  if (prcAlive) {
                     audioTrackThreadHandler.post(
                         () -> {
-                          if (listeners.isRunningOnCorrectThread()) {
+                          boolean prcGuard = listeners.isRunningOnCorrectThread();
+                          Log.w(TAG, "PRCDBG onReleased dispatch guard=" + prcGuard
+                          + " postThread=" + Thread.currentThread().getName());
+                          if (prcGuard) {
                             listeners.sendEvent(Listener::onReleased);
                           }
                         });

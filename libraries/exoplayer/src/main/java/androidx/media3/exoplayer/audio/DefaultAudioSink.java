@@ -1575,7 +1575,8 @@ public final class DefaultAudioSink implements AudioSink {
       // We need to release the audio output on every flush because of known AudioTrack flush issues
       // on some devices. See b/7941810 or b/19193985.
       // TODO: b/143500232 - Experiment with not releasing AudioOutput on flush.
-      pendingReleaseCount.incrementAndGet();
+      int prcAfterInc = pendingReleaseCount.incrementAndGet();
+      Log.w(TAG, "PRCDBG INC -> " + prcAfterInc + " thread=" + Thread.currentThread().getName());
       audioOutput.release();
       audioOutput = null;
     }
@@ -2025,7 +2026,8 @@ public final class DefaultAudioSink implements AudioSink {
     public void onReleased() {
       // Don't check for stale events. It's expected that this event arrives after the class field
       // has been updated to null or a new listener.
-      pendingReleaseCount.getAndDecrement();
+      int prcAfterDec = pendingReleaseCount.getAndDecrement();
+      Log.w(TAG, "PRCDBG DEC(onReleased) -> " + prcAfterDec + " thread=" + Thread.currentThread().getName());
       if (listener != null) {
         listener.onAudioTrackReleased(
             new AudioTrackConfig(
