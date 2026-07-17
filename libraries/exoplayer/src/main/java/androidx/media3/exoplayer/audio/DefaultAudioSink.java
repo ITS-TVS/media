@@ -1954,6 +1954,11 @@ public final class DefaultAudioSink implements AudioSink {
         : C.INDEX_UNSET;
   }
 
+  /* package */ static void onAudioOutputReleaseComplete(){
+    int prcAfterDec = pendingReleaseCount.getAndDecrement();
+    Log.w(TAG, "PRCDBG DEC(onReleased) -> " + prcAfterDec + " thread=" + Thread.currentThread().getName());
+  }
+
   private final class AudioOutputListener implements AudioOutput.Listener {
 
     private final OutputConfig outputConfig;
@@ -2026,9 +2031,7 @@ public final class DefaultAudioSink implements AudioSink {
     public void onReleased() {
       // Don't check for stale events. It's expected that this event arrives after the class field
       // has been updated to null or a new listener.
-      int prcAfterDec = pendingReleaseCount.getAndDecrement();
-      Log.w(TAG, "PRCDBG DEC(onReleased) -> " + prcAfterDec + " thread=" + Thread.currentThread().getName());
-      if (listener != null) {
+            if (listener != null) {
         listener.onAudioTrackReleased(
             new AudioTrackConfig(
                 outputConfig.encoding,
