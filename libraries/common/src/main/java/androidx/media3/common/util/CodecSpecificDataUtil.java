@@ -1067,7 +1067,7 @@ public final class CodecSpecificDataUtil {
       }
     } else {
       Log.w(TAG, "Unknown HEVC profile string: " + profileString);
-      return MediaCodecProfileAndLevel.UNSUPPORTABLE;
+      return null;
     }
     @Nullable String levelString = parts[3];
     @Nullable Integer level = hevcCodecStringToProfileLevel(levelString);
